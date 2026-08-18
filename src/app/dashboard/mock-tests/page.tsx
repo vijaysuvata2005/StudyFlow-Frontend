@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  Suspense,
+} from "react";
+
 import {
   ArrowLeft,
   BookOpen,
@@ -14,6 +20,7 @@ import {
   XCircle,
   RotateCcw,
 } from "lucide-react";
+
 import { useSearchParams } from "next/navigation";
 
 interface Subject {
@@ -47,12 +54,14 @@ interface AttemptAnswer {
 
 interface Attempt {
   _id: string;
-  mockTest: string | {
-    _id: string;
-    title: string;
-    duration: number;
-    subject?: Subject;
-  };
+  mockTest:
+    | string
+    | {
+        _id: string;
+        title: string;
+        duration: number;
+        subject?: Subject;
+      };
   totalQuestions: number;
   correctAnswers: number;
   wrongAnswers: number;
@@ -76,10 +85,18 @@ interface SubmitResult {
   answers: AttemptAnswer[];
 }
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL;
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export default function MockTestsPage() {
+/* 
+|--------------------------------------------------------------------------
+| MAIN CONTENT
+|--------------------------------------------------------------------------
+| useSearchParams() is inside this component.
+| The component itself is wrapped with Suspense at the bottom.
+|--------------------------------------------------------------------------
+*/
+
+function MockTestsContent() {
   const searchParams = useSearchParams();
 
   const subjectFilter =
@@ -228,7 +245,7 @@ export default function MockTestsPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | GET LATEST ATTEMPT FOR TEST
+  | GET ATTEMPTS FOR TEST
   |--------------------------------------------------------------------------
   */
 
@@ -325,11 +342,6 @@ export default function MockTestsPage() {
   const startTest = (test: MockTest) => {
     setSelectedTest(test);
 
-    /*
-     * IMPORTANT:
-     * Reattempt always starts from zero.
-     */
-
     setAnswers({});
     setCurrentQuestion(0);
     setSubmitted(false);
@@ -419,10 +431,6 @@ export default function MockTestsPage() {
         return;
       }
 
-      /*
-       * Convert local answers into backend format.
-       */
-
       const formattedAnswers =
         selectedTest.questions.map(
           (question) => ({
@@ -461,21 +469,11 @@ export default function MockTestsPage() {
         );
       }
 
-      /*
-       * Backend result becomes the
-       * final source of truth.
-       */
-
       setSubmitResult(
         data.result
       );
 
       setSubmitted(true);
-
-      /*
-       * Refresh attempts so that
-       * test card also shows latest score.
-       */
 
       await loadAttempts();
 
@@ -571,8 +569,6 @@ export default function MockTestsPage() {
         </header>
 
         <section className="mx-auto max-w-4xl px-5 py-8 sm:py-12">
-          {/* RESULT SUMMARY */}
-
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-7 sm:p-10">
             <div className="flex flex-col items-center text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-zinc-950">
@@ -637,8 +633,6 @@ export default function MockTestsPage() {
               </div>
             </div>
           </div>
-
-          {/* ANSWER REVIEW */}
 
           <div className="mt-8">
             <div className="mb-5">
@@ -772,24 +766,19 @@ export default function MockTestsPage() {
             </div>
           </div>
 
-          {/* REATTEMPT */}
-
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <button
               onClick={() => {
-                const test =
+                const mockTestId =
                   typeof reviewAttempt.mockTest ===
                   "string"
-                    ? tests.find(
-                        (item) =>
-                          item._id ===
-                          reviewAttempt.mockTest
-                      )
-                    : tests.find(
-                        (item) =>
-                          item._id ===
-                          reviewAttempt.mockTest._id
-                      );
+                    ? reviewAttempt.mockTest
+                    : reviewAttempt.mockTest?._id;
+
+                const test = tests.find(
+                  (item) =>
+                    item._id === mockTestId
+                );
 
                 if (test) {
                   setReviewAttempt(null);
@@ -869,8 +858,6 @@ export default function MockTestsPage() {
         </header>
 
         <section className="mx-auto max-w-4xl px-5 py-8 sm:py-12">
-          {/* ERROR */}
-
           {error && (
             <div className="mb-6 rounded-2xl border border-red-900 bg-red-950/40 p-5 text-sm text-red-300">
               {error}
@@ -879,12 +866,6 @@ export default function MockTestsPage() {
 
           {submitted &&
           submitResult ? (
-            /*
-            |--------------------------------------------------------------------------
-            | RESULT PAGE
-            |--------------------------------------------------------------------------
-            */
-
             <div>
               <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-7 text-center sm:p-10">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-zinc-950">
@@ -1014,12 +995,6 @@ export default function MockTestsPage() {
               </div>
             </div>
           ) : (
-            /*
-            |--------------------------------------------------------------------------
-            | QUESTION PAGE
-            |--------------------------------------------------------------------------
-            */
-
             <>
               <div className="mb-5 flex items-center justify-between text-sm text-zinc-500">
                 <span>
@@ -1309,8 +1284,6 @@ export default function MockTestsPage() {
                       questions
                     </p>
 
-                    {/* ATTEMPT INFO */}
-
                     {latestAttempt ? (
                       <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
                         <div className="flex items-center justify-between">
@@ -1417,4 +1390,31 @@ function answeredCount(
   answers: Record<string, number>
 ) {
   return Object.keys(answers).length;
+}
+
+/*
+|--------------------------------------------------------------------------
+| SUSPENSE WRAPPER
+|--------------------------------------------------------------------------
+| This fixes the Next.js 16 production build error:
+| "useSearchParams() should be wrapped in a suspense boundary"
+|--------------------------------------------------------------------------
+*/
+
+export default function MockTestsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-zinc-950 text-white">
+          <div className="flex min-h-screen items-center justify-center">
+            <div className="text-sm text-zinc-400">
+              Loading Mock Tests...
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <MockTestsContent />
+    </Suspense>
+  );
 }

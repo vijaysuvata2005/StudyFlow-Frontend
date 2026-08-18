@@ -1,125 +1,59 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ArrowLeft,
   BookOpen,
-  Brain,
+  ChevronDown,
   FileText,
-  LogOut,
-  Menu,
-  Trophy,
-  UserRound,
-  X,
-  ArrowRight,
   Loader2,
+  Search,
 } from "lucide-react";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL;
-
-interface User {
-  id: string;
+interface Subject {
+  _id: string;
   name: string;
-  username: string;
-  email: string;
+  slug?: string;
 }
 
-interface DashboardStats {
-  subjects: number;
-  testsAttempted: number;
-  averageScore: number;
+interface Note {
+  _id: string;
+  title: string;
+  content: string;
+  subject?: Subject;
+  createdAt?: string;
 }
 
-const menuItems = [
-  {
-    title: "Subjects",
-    description: "Explore your study subjects",
-    icon: BookOpen,
-    href: "/dashboard/subjects",
-  },
-  {
-    title: "Notes",
-    description: "Read topic-wise study notes",
-    icon: FileText,
-    href: "/dashboard/notes",
-  },
-  {
-    title: "MCQ Practice",
-    description: "Practice questions subject-wise",
-    icon: Brain,
-    href: "/dashboard/mcqs",
-  },
-  {
-    title: "Mock Tests",
-    description: "Test your preparation",
-    icon: Trophy,
-    href: "/dashboard/mock-tests",
-  },
-];
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export default function DashboardPage() {
-  const [user, setUser] = useState<User | null>(null);
-  const [mobileMenu, setMobileMenu] = useState(false);
+function NotesContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-  const [stats, setStats] = useState<DashboardStats>({
-    subjects: 0,
-    testsAttempted: 0,
-    averageScore: 0,
-  });
+  const subjectFilter =
+    searchParams.get("subject") || "";
 
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [statsError, setStatsError] = useState("");
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [search, setSearch] = useState("");
+  const [openNote, setOpenNote] =
+    useState<string | null>(null);
 
-  // =====================================================
-  // LOAD USER
-  // =====================================================
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const savedUser = localStorage.getItem("studyflow_user");
-    const token = localStorage.getItem("studyflow_token");
-
-    if (!token || !savedUser) {
-      window.location.href = "/login";
-      return;
-    }
-
-    try {
-      const parsedUser = JSON.parse(savedUser);
-
-      setUser(parsedUser);
-    } catch {
-      localStorage.removeItem("studyflow_user");
-      localStorage.removeItem("studyflow_token");
-
-      window.location.href = "/login";
-    }
-  }, []);
-
-  // =====================================================
-  // LOAD DASHBOARD STATS
-  // =====================================================
-
-  useEffect(() => {
-    const loadDashboardStats = async () => {
-      const token = localStorage.getItem("studyflow_token");
-
-      if (!token) {
-        return;
-      }
-
+    const loadNotes = async () => {
       try {
-        setStatsLoading(true);
-        setStatsError("");
-
         const response = await fetch(
-          `${API_URL}/api/attempts/dashboard-stats`,
+          `${API_URL}/api/notes`,
           {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
             cache: "no-store",
           }
         );
@@ -128,445 +62,205 @@ export default function DashboardPage() {
 
         if (!response.ok) {
           throw new Error(
-            data.message || "Failed to load dashboard stats"
+            data.message || "Failed to load notes"
           );
         }
 
-        if (data.success && data.stats) {
-          setStats({
-            subjects: Number(data.stats.subjects || 0),
-            testsAttempted: Number(
-              data.stats.testsAttempted || 0
-            ),
-            averageScore: Number(
-              data.stats.averageScore || 0
-            ),
-          });
-        }
+        setNotes(data.notes || []);
       } catch (error) {
-        console.error(
-          "Dashboard stats error:",
-          error
-        );
+        console.error(error);
 
-        setStatsError(
+        setError(
           error instanceof Error
             ? error.message
-            : "Failed to load dashboard stats"
+            : "Failed to load notes"
         );
       } finally {
-        setStatsLoading(false);
+        setLoading(false);
       }
     };
 
-    loadDashboardStats();
+    loadNotes();
   }, []);
 
-  // =====================================================
-  // LOGOUT
-  // =====================================================
+  const filteredNotes = useMemo(() => {
+    const text = search.toLowerCase().trim();
 
-  const handleLogout = () => {
-    localStorage.removeItem("studyflow_token");
-    localStorage.removeItem("studyflow_user");
+    return notes.filter((note) => {
+      const matchesSearch =
+        !text ||
+        note.title.toLowerCase().includes(text) ||
+        note.content.toLowerCase().includes(text);
 
-    window.location.href = "/";
-  };
+      if (!subjectFilter) {
+        return matchesSearch;
+      }
 
-  // =====================================================
-  // LOADING USER
-  // =====================================================
-
-  if (!user) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-white">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-zinc-700 border-t-white" />
-
-          <div className="text-sm text-zinc-400">
-            Loading StudyFlow...
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // =====================================================
-  // DASHBOARD
-  // =====================================================
+      return (
+        matchesSearch &&
+        (
+          note.subject?.slug === subjectFilter ||
+          note.subject?._id === subjectFilter
+        )
+      );
+    });
+  }, [notes, search, subjectFilter]);
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
+      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-950">
+              <BookOpen size={19} />
+            </div>
 
-      {/* =================================================
-          HEADER
-      ================================================= */}
+            <span className="font-semibold">
+              StudyFlow
+            </span>
+          </Link>
 
-<header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
-  <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5">
-
-    {/* LOGO */}
-    <Link
-      href="/dashboard"
-      className="flex items-center gap-2"
-    >
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-950">
-        <BookOpen size={19} />
-      </div>
-
-      <span className="font-semibold">
-        StudyFlow
-      </span>
-    </Link>
-
-    {/* DESKTOP USER */}
-    <div className="hidden items-center gap-4 sm:flex">
-
-      <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800">
-          <UserRound size={17} />
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 rounded-xl border border-zinc-800 px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-900 hover:text-white"
+          >
+            <ArrowLeft size={16} />
+            Dashboard
+          </Link>
         </div>
+      </header>
 
-        <div>
-          <p className="text-sm font-medium">
-            {user.name}
-          </p>
+      <section className="mx-auto max-w-5xl px-5 py-10">
+        <div className="mb-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-zinc-950">
+            <FileText size={22} />
+          </div>
 
-          <p className="text-xs text-zinc-500">
-            @{user.username}
-          </p>
-        </div>
-      </div>
-
-      <button
-        onClick={handleLogout}
-        className="flex items-center gap-2 rounded-xl border border-zinc-800 px-3 py-2 text-sm text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
-      >
-        <LogOut size={16} />
-        Logout
-      </button>
-
-    </div>
-
-    {/* MOBILE MENU BUTTON */}
-    <button
-      onClick={() => setMobileMenu(!mobileMenu)}
-      aria-label="Toggle menu"
-      className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 sm:hidden"
-    >
-      {mobileMenu ? (
-        <X size={19} />
-      ) : (
-        <Menu size={19} />
-      )}
-    </button>
-
-  </div>
-
-  {/* MOBILE MENU */}
-  {mobileMenu && (
-    <div className="border-t border-zinc-800 px-5 py-4 sm:hidden">
-
-      <div className="mb-4 flex items-center gap-3">
-
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800">
-          <UserRound size={17} />
-        </div>
-
-        <div>
-          <p className="text-sm font-medium">
-            {user.name}
-          </p>
-
-          <p className="text-xs text-zinc-500">
-            @{user.username}
-          </p>
-        </div>
-
-      </div>
-
-      <button
-        onClick={handleLogout}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
-      >
-        <LogOut size={16} />
-        Logout
-      </button>
-
-    </div>
-  )}
-</header>
-
-      {/* =================================================
-          MAIN
-      ================================================= */}
-
-      <section className="mx-auto max-w-7xl px-5 py-8 sm:py-12">
-
-        {/* WELCOME */}
-
-        <div className="mb-10">
-
-          <p className="text-sm text-zinc-500">
-            Welcome back 👋
-          </p>
-
-          <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-            Hello, {user.name}
+          <h1 className="mt-5 text-3xl font-bold">
+            Study Notes
           </h1>
 
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400 sm:text-base">
-            Continue your preparation and improve your
-            performance with StudyFlow.
+          <p className="mt-2 text-zinc-500">
+            Read notes added by your admin.
           </p>
-
         </div>
 
-        {/* =================================================
-            STATS
-        ================================================= */}
+        <div className="relative mb-7">
+          <Search
+            size={18}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600"
+          />
 
-        <div className="mb-8 grid gap-4 sm:grid-cols-3">
-
-          {/* SUBJECTS */}
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-
-            <div className="flex items-center justify-between">
-
-              <p className="text-sm text-zinc-500">
-                Subjects
-              </p>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-300">
-                <BookOpen size={17} />
-              </div>
-
-            </div>
-
-            {statsLoading ? (
-              <div className="mt-3 flex items-center gap-2">
-                <Loader2
-                  size={18}
-                  className="animate-spin text-zinc-500"
-                />
-
-                <span className="text-sm text-zinc-500">
-                  Loading...
-                </span>
-              </div>
-            ) : (
-              <p className="mt-3 text-3xl font-bold">
-                {stats.subjects}
-              </p>
-            )}
-
-            <p className="mt-1 text-xs text-zinc-600">
-              Available subjects
-            </p>
-
-          </div>
-
-          {/* TESTS ATTEMPTED */}
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-
-            <div className="flex items-center justify-between">
-
-              <p className="text-sm text-zinc-500">
-                Tests Attempted
-              </p>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-300">
-                <Trophy size={17} />
-              </div>
-
-            </div>
-
-            {statsLoading ? (
-              <div className="mt-3 flex items-center gap-2">
-                <Loader2
-                  size={18}
-                  className="animate-spin text-zinc-500"
-                />
-
-                <span className="text-sm text-zinc-500">
-                  Loading...
-                </span>
-              </div>
-            ) : (
-              <p className="mt-3 text-3xl font-bold">
-                {stats.testsAttempted}
-              </p>
-            )}
-
-            <p className="mt-1 text-xs text-zinc-600">
-              Completed mock tests
-            </p>
-
-          </div>
-
-          {/* AVERAGE SCORE */}
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-
-            <div className="flex items-center justify-between">
-
-              <p className="text-sm text-zinc-500">
-                Average Score
-              </p>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-300">
-                <Brain size={17} />
-              </div>
-
-            </div>
-
-            {statsLoading ? (
-              <div className="mt-3 flex items-center gap-2">
-                <Loader2
-                  size={18}
-                  className="animate-spin text-zinc-500"
-                />
-
-                <span className="text-sm text-zinc-500">
-                  Loading...
-                </span>
-              </div>
-            ) : (
-              <p className="mt-3 text-3xl font-bold">
-                {stats.averageScore}%
-              </p>
-            )}
-
-            <p className="mt-1 text-xs text-zinc-600">
-              Your overall performance
-            </p>
-
-          </div>
-
+          <input
+            value={search}
+            onChange={(e) =>
+              setSearch(e.target.value)
+            }
+            placeholder="Search notes..."
+            className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-11 pr-4 text-sm outline-none focus:border-zinc-600"
+          />
         </div>
 
-        {/* STATS ERROR */}
-
-        {statsError && (
-          <div className="mb-8 rounded-2xl border border-red-900 bg-red-950/30 px-5 py-4 text-sm text-red-300">
-            Unable to load dashboard statistics:{" "}
-            {statsError}
+        {loading && (
+          <div className="flex min-h-[300px] items-center justify-center">
+            <div className="flex items-center gap-3 text-zinc-400">
+              <Loader2
+                size={20}
+                className="animate-spin"
+              />
+              Loading notes...
+            </div>
           </div>
         )}
 
-        {/* =================================================
-            LEARNING OPTIONS
-        ================================================= */}
-
-        <div>
-
-          <div className="mb-5">
-
-            <h2 className="text-xl font-semibold">
-              Start Learning
-            </h2>
-
-            <p className="mt-1 text-sm text-zinc-500">
-              Choose what you want to study today.
-            </p>
-
+        {error && (
+          <div className="rounded-2xl border border-red-900 bg-red-950/40 p-5 text-red-300">
+            {error}
           </div>
+        )}
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {!loading &&
+          !error &&
+          filteredNotes.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-zinc-800 p-12 text-center text-zinc-500">
+              No notes found.
+            </div>
+          )}
 
-            {menuItems.map((item) => {
-              const Icon = item.icon;
+        <div className="space-y-4">
+          {filteredNotes.map((note) => {
+            const isOpen = openNote === note._id;
 
-              return (
-                <Link
-                  key={item.title}
-                  href={item.href}
-                  className="group rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 text-left transition hover:-translate-y-1 hover:border-zinc-700 hover:bg-zinc-900"
+            return (
+              <article
+                key={note._id}
+                className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60"
+              >
+                <button
+                  onClick={() =>
+                    setOpenNote(
+                      isOpen ? null : note._id
+                    )
+                  }
+                  className="flex w-full items-center justify-between gap-4 p-5 text-left hover:bg-zinc-900"
                 >
+                  <div>
+                    <h2 className="font-semibold">
+                      {note.title}
+                    </h2>
 
-                  <div className="mb-5 flex items-center justify-between">
+                    {note.subject?.name && (
+                      <p className="mt-1 text-xs text-zinc-600">
+                        {note.subject.name}
+                      </p>
+                    )}
+                  </div>
 
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-zinc-950 transition group-hover:scale-105">
-                      <Icon size={21} />
+                  <ChevronDown
+                    size={19}
+                    className={`shrink-0 text-zinc-500 transition ${
+                      isOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {isOpen && (
+                  <div className="border-t border-zinc-800 px-5 py-6">
+                    <div className="whitespace-pre-wrap text-sm leading-7 text-zinc-300">
+                      {note.content}
                     </div>
-
-                    <ArrowRight
-                      size={18}
-                      className="text-zinc-600 transition group-hover:translate-x-1 group-hover:text-white"
-                    />
-
                   </div>
-
-                  <h3 className="font-semibold">
-                    {item.title}
-                  </h3>
-
-                  <p className="mt-2 text-sm leading-6 text-zinc-500">
-                    {item.description}
-                  </p>
-
-                  <div className="mt-5 text-xs font-medium text-zinc-400 group-hover:text-white">
-                    Open →
-                  </div>
-
-                </Link>
-              );
-            })}
-
-          </div>
-
+                )}
+              </article>
+            );
+          })}
         </div>
-
-        {/* =================================================
-            QUICK MCQ ACCESS
-        ================================================= */}
-
-        <div className="mt-10">
-
-          <Link
-            href="/dashboard/mcqs"
-            className="group flex flex-col gap-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 transition hover:border-zinc-700 hover:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between"
-          >
-
-            <div className="flex items-center gap-4">
-
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-zinc-950">
-                <Brain size={22} />
-              </div>
-
-              <div>
-
-                <h3 className="font-semibold">
-                  MCQ Practice
-                </h3>
-
-                <p className="mt-1 text-sm text-zinc-500">
-                  Open MCQs and choose a subject to start practicing.
-                </p>
-
-              </div>
-
-            </div>
-
-            <div className="flex items-center gap-2 text-sm font-medium text-zinc-400 transition group-hover:text-white">
-
-              Start Practice
-
-              <ArrowRight
-                size={17}
-                className="transition group-hover:translate-x-1"
-              />
-
-            </div>
-
-          </Link>
-
-        </div>
-
       </section>
-
     </main>
   );
 }
+
+function NotesLoading() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-white">
+      <div className="flex items-center gap-3 text-zinc-400">
+        <Loader2
+          size={20}
+          className="animate-spin"
+        />
+        Loading notes...
+      </div>
+    </main>
+  );
+}
+
+export default function NotesPage() {
+  return (
+    <Suspense fallback={<NotesLoading />}>
+      <NotesContent />
+    </Suspense>
+  );
+} 

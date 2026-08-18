@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import {
   ArrowLeft,
   Brain,
@@ -12,8 +12,7 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL;
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface Subject {
   _id: string;
@@ -41,7 +40,35 @@ interface MCQAttempt {
   attemptedAt: string;
 }
 
+/* =========================================================
+   PAGE WRAPPER
+========================================================= */
+
 export default function MCQsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-white">
+          <div className="flex items-center gap-3 text-zinc-400">
+            <Loader2
+              size={21}
+              className="animate-spin"
+            />
+            Loading MCQ Practice...
+          </div>
+        </main>
+      }
+    >
+      <MCQsContent />
+    </Suspense>
+  );
+}
+
+/* =========================================================
+   MAIN MCQ CONTENT
+========================================================= */
+
+function MCQsContent() {
   const searchParams = useSearchParams();
   const selectedSubject = searchParams.get("subject");
 
@@ -64,6 +91,7 @@ export default function MCQsPage() {
          * NO SUBJECT SELECTED
          * Load all subjects added by admin.
          */
+
         if (!selectedSubject) {
           const response = await fetch(
             `${API_URL}/api/subjects`,
@@ -76,7 +104,8 @@ export default function MCQsPage() {
 
           if (!response.ok) {
             throw new Error(
-              data.message || "Failed to load subjects"
+              data.message ||
+                "Failed to load subjects"
             );
           }
 
@@ -90,6 +119,7 @@ export default function MCQsPage() {
          * SUBJECT SELECTED
          * Load MCQs for that subject.
          */
+
         const response = await fetch(
           `${API_URL}/api/mcqs?subject=${encodeURIComponent(
             selectedSubject
@@ -103,7 +133,8 @@ export default function MCQsPage() {
 
         if (!response.ok) {
           throw new Error(
-            data.message || "Failed to load MCQs"
+            data.message ||
+              "Failed to load MCQs"
           );
         }
 
@@ -314,79 +345,80 @@ function MCQQuestions({
     Record<string, number>
   >({});
 
-const handleAnswer = async (
-  mcq: MCQ,
-  optionNumber: number
-) => {
-  if (selected[mcq._id]) {
-    return;
-  }
-
-  // Show result immediately
-  setSelected((previous) => ({
-    ...previous,
-    [mcq._id]: optionNumber,
-  }));
-
-  try {
-    const token =
-      localStorage.getItem(
-        "studyflow_token"
-      );
-
-    if (!token) {
-      console.error(
-        "User token not found"
-      );
+  const handleAnswer = async (
+    mcq: MCQ,
+    optionNumber: number
+  ) => {
+    if (selected[mcq._id]) {
       return;
     }
 
-    const response = await fetch(
-      `${API_URL}/api/attempts/mcqs/${mcq._id}`,
-      {
-        method: "POST",
+    // Show result immediately
+    setSelected((previous) => ({
+      ...previous,
+      [mcq._id]: optionNumber,
+    }));
 
-        headers: {
-          "Content-Type":
-            "application/json",
+    try {
+      const token =
+        localStorage.getItem(
+          "studyflow_token"
+        );
 
-          Authorization: `Bearer ${token}`,
-        },
-
-        body: JSON.stringify({
-          selectedAnswer: optionNumber,
-        }),
+      if (!token) {
+        console.error(
+          "User token not found"
+        );
+        return;
       }
-    );
 
-    const data = await response.json();
+      const response = await fetch(
+        `${API_URL}/api/attempts/mcqs/${mcq._id}`,
+        {
+          method: "POST",
 
-    if (!response.ok) {
-      console.error(
-        "MCQ attempt save failed:",
-        data.message
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Authorization: `Bearer ${token}`,
+          },
+
+          body: JSON.stringify({
+            selectedAnswer: optionNumber,
+          }),
+        }
       );
 
-      return;
-    }
+      const data = await response.json();
 
-    console.log(
-      "MCQ attempt saved:",
-      data.attempt
-    );
-  } catch (error) {
-    console.error(
-      "MCQ attempt request failed:",
-      error
-    );
-  }
-};
+      if (!response.ok) {
+        console.error(
+          "MCQ attempt save failed:",
+          data.message
+        );
+
+        return;
+      }
+
+      console.log(
+        "MCQ attempt saved:",
+        data.attempt
+      );
+    } catch (error) {
+      console.error(
+        "MCQ attempt request failed:",
+        error
+      );
+    }
+  };
 
   const getOptionClass = (
     mcq: MCQ,
     optionNumber: number
   ) => {
-    const selectedOption = selected[mcq._id];
+    const selectedOption =
+      selected[mcq._id];
 
     if (!selectedOption) {
       return "border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-900";
@@ -402,7 +434,10 @@ const handleAnswer = async (
       return "border-emerald-700 bg-emerald-950/50 text-emerald-300";
     }
 
-    if (isUserSelected && !isCorrect) {
+    if (
+      isUserSelected &&
+      !isCorrect
+    ) {
       return "border-red-700 bg-red-950/50 text-red-300";
     }
 
@@ -413,13 +448,17 @@ const handleAnswer = async (
     mcq: MCQ,
     optionNumber: number
   ) => {
-    const selectedOption = selected[mcq._id];
+    const selectedOption =
+      selected[mcq._id];
 
     if (!selectedOption) {
       return null;
     }
 
-    if (optionNumber === mcq.correctAnswer) {
+    if (
+      optionNumber ===
+      mcq.correctAnswer
+    ) {
       return (
         <span className="text-emerald-400">
           ✓
@@ -444,7 +483,8 @@ const handleAnswer = async (
   const correctCount = mcqs.reduce(
     (total, mcq) =>
       total +
-      (selected[mcq._id] === mcq.correctAnswer
+      (selected[mcq._id] ===
+      mcq.correctAnswer
         ? 1
         : 0),
     0
@@ -638,7 +678,10 @@ const handleAnswer = async (
 
                   <div className="mt-6 space-y-3">
                     {mcq.options.map(
-                      (option, optionIndex) => {
+                      (
+                        option,
+                        optionIndex
+                      ) => {
                         const number =
                           optionIndex + 1;
 
