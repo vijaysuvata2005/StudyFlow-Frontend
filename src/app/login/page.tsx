@@ -25,8 +25,12 @@ export default function LoginPage() {
     setError("");
 
     try {
+      const API_URL =
+        process.env.NEXT_PUBLIC_API_URL ||
+        "http://localhost:5000";
+
       const response = await fetch(
-        "http://localhost:5000/api/users/login",
+        `${API_URL}/api/users/login`,
         {
           method: "POST",
           headers: {
@@ -42,7 +46,9 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Login failed");
+        throw new Error(
+          data.message || "Login failed"
+        );
       }
 
       // Save JWT token
@@ -57,9 +63,11 @@ export default function LoginPage() {
         JSON.stringify(data.user)
       );
 
-      // Go to dashboard after successful login
+      // Go to dashboard
       window.location.href = "/dashboard";
     } catch (error) {
+      console.error("Login error:", error);
+
       setError(
         error instanceof Error
           ? error.message
@@ -74,6 +82,7 @@ export default function LoginPage() {
     <main className="min-h-screen bg-zinc-950 px-5 py-10 text-white">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md items-center">
         <div className="w-full">
+
           {/* Logo + Heading */}
 
           <div className="mb-8 text-center">
@@ -100,6 +109,7 @@ export default function LoginPage() {
               onSubmit={handleLogin}
               className="space-y-5"
             >
+
               {/* Username */}
 
               <div>
@@ -205,6 +215,7 @@ export default function LoginPage() {
               ← Back to StudyFlow
             </Link>
           </div>
+
         </div>
       </div>
     </main>

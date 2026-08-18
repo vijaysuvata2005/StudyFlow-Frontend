@@ -42,9 +42,9 @@ interface MCQForm {
   correctAnswer: number;
   explanation: string;
 }
-
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5000";
 
 const createEmptyMCQ = (): MCQForm => ({
   id: crypto.randomUUID(),
